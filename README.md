@@ -93,4 +93,4 @@ You can find the star rating code in `starsort.go`. And yes, it looks very maths
 - Break tags up into new tags table
 - Add a way to update in parts, perhaps an option to do one category at once
 - Add a column to mark a title that has an error on import, so we can do a run of just errors
-- Add category 19377132031 children's sci-fi fantasy~~
+~~Add category 19377132031 children's sci-fi fantasy~~
