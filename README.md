@@ -66,7 +66,7 @@ The issue I have with star rating is that a title with two 5★ ratings will ran
 
 The algorithm I use is a Go version of Evan Miller's "Ranking Items With Star Ratings" which uses a Bayesian approximation to provide a better average rating.
 
-	http://www.evanmiller.org/ranking-items-with-star-ratings.html
+- [Evan Miller, Ranking Items With Star Ratings](http://www.evanmiller.org/ranking-items-with-star-ratings.html)
 
 I scrape all the raw data about how many people scored a title 5★, .., 1★ and use those to recalculate a better average.
 
