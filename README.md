@@ -10,24 +10,24 @@ Like so many programmery things — it's not 'hard' but it isn't simple or quick
 
 ## The Plan
 
-The plan was to scrape all the Audible categories I care about, fill a database with them. Next I wanted to apply a better rating algorithm to them in the hope of seeing a more representative list of good titles. Finally, I want to build a better search app so I can find my next book without having to use the terrible juddery lists in the Audible iOS app.
+The plan was to scrape all the Audible categories I care about and fill a database with them. Next, I wanted to apply a better rating algorithm to them, in the hope of seeing a more representative list of good titles. Finally, I want to build a better search app, so I can find my next book without having to use the terrible juddery lists in the Audible iOS app. I could build a web app, but I mostly have my phone in my hand when I'm looking for a new book to listen to.
 
-So far I have done the following:
+So far, I have done the following:
 
 - Built the scraper
 - Created the online database
 - Written a better rating algorithm
-- Scraped 12 categories with 3 sort orders each
+- Scraped 12 categories, with 3 sort orders each
 
-So I now have a database with 6,471 audio books in it. Unfortunately this includes title not in English which are no use to me, so I will probably have to run it again and remove them.
+So, I now have a database with 7,230 audiobooks in it. Unfortunately, this includes titles not in English which are of no use to me, so I will probably have to run it again and remove them.
 
 So that just leaves the simple task of building an app (and working out a few niggles).
 
 ## Basic Details
 
-The Go files (laud.go and starsort.go) make up the Audible scraper. It slurps up categories (nodes as Audible calls them) and fills a Superbase database. Supabase is just Postgres + Postgrest, so you should be able to make it work with any SQl database easily enough (theres only a few DB calls).
+The Go files (laud.go and starsort.go) make up the Audible scraper. It slurps up categories (nodes, as Audible calls them) and fills a Superbase database. Supabase is just Postgres + Postgrest, so you should be able to make it work with any SQL database easily enough (there's only a few DB calls).
 
-I'm currently listening to a lot of Fantasy & Sci-Fi so I only scraped those categories. It's a little tricky to find out what the categories are so I ended up going to a category on the Audible website and examining the URL string for a `node` parameter, which tend to look like `node=19378442031`.
+I'm currently listening to a lot of Fantasy & Sci-Fi, so I only scraped those categories. It's a little tricky to find out what the categories are, so I ended up going to a category on the Audible website and examining the URL string for a `node` parameter, which tend to look like `node=19378442031`.
 
 These are the `nodes` I scrape, which I've renamed `categories`:
 
@@ -54,15 +54,15 @@ Again, these are a parameter in the search URL, with the more sensible name of `
 
 ## The Scraping
 
-As with all scraping, this code relies heavily on Audible keeping the same design. It's extra-complicated by there being two Audibles — the one you see if signed in and the one when signed out. It took me quite a while to realise that I was looking at the wrong HTML. Also, Audible use javascript to populate some fields, especially the ones that need translation (like date formats). Again it took me a while to work out that I needed to scrape some JSON data in a script tag to find the published date.
+As with all scraping, this code relies heavily on Audible keeping the same design. It's extra-complicated by there being two Audibles — the one you see if signed in and the one when signed out. It took me quite a while to realise that I was looking at the wrong HTML. Furthermore, Audible uses javascript to populate some fields, especially the ones that need translation (like date formats). Again, it took me a while to work out that I needed to scrape some JSON data in a script tag to find the published date.
 
-The scraper itself is reasonably reliable (though occasionally it messes up, possibly due to network issues) and currently you have to run it again from scratch (or edit the code to comment out categories already scraped). It won't ask for something that is already in the cache or the database (and it fills the cache from the database before starting). However, it will still request all the category list pages on every run (which is only 10 pages, but it adds up, once you multiply by three for each sort).
+The scraper itself is reasonably reliable (though occasionally, it messes up, possibly due to network issues) and currently you have to run it again from scratch (or edit the code to comment out categories already scraped). It won't ask for something that is already in the cache or the database (and it fills the cache from the database before starting). However, it will still request all the category list pages on every run (which is only 10 pages, but it adds up, once you multiply by three for each sort).
 
-One annoying thing I've found is that, when you fins a title, it isn't tagged by the category in which you found it, so a Fantasy title wont be tagged for "Sci-Fi", just "Time Travel". Which probably means having to scan every page for every category If I want to use metadata tags.
+One annoying thing I've found is that, when you fins a title, it isn't tagged by the category in which you found it, so a Fantasy title won't be tagged as "Sci-Fi", just "Time Travel". Which probably means having to scan every page for every category If I want to use metadata tags.
 
 ## The Better Rating algorithm
 
-The issue I have with star rating is that a title with two 5★ ratings will rank the same as a title with 1,000 5★ ratings. It's infuriating. So I went looking for a better approach that would fix this issue. I'd like to say I delved deep into the world of "Dirichlet prior distribution on the probability vectors", but in reality I looked at a StackOverflow page and converted some bonkers Python code into a working Go function.
+The issue I have with star rating is that a title with two 5★ ratings will rank the same as a title with 1,000 5★ ratings. It's infuriating. So I went looking for a better approach that would address this issue. I'd like to say I delved deep into the world of "Dirichlet prior distribution on the probability vectors", but in reality I looked at a StackOverflow page and converted some bonkers Python code into a working Go function.
 
 The algorithm I use is a Go version of Evan Miller's "Ranking Items With Star Ratings" which uses a Bayesian approximation to provide a better average rating.
 
@@ -74,7 +74,7 @@ Tolkien's "The Two Towers" read by Andy Serkis (4,154 ratings), is rated:
 
 	["3,918", "196", "26", "4", "6"]
 
-Amazon gives it a rating of `4.9` which is pretty close to my score of `4.9209`, however, it's top of my list (with the highest score), but comes in 14th on Amazon's list—behind "The Eye of the Bedlam Bride" (170 ratings, top spot) and "Mythology: Indian Mythology, Gods, Goddesses, and Stories" (100 ratings, 3rd spot).
+Amazon gives it a rating of `4.9` which is pretty close to my score of `4.9209`. However, it's top of my list (with the highest score), but comes in 14th on Amazon's list—behind "The Eye of the Bedlam Bride" (170 ratings, top spot) and "Mythology: Indian Mythology, Gods, Goddesses, and Stories" (100 ratings, 3rd spot).
 
 The ratings for "Mythology: Indian Mythology, Gods, Goddesses, and Stories" are, the somewhat suspicious-looking:
 
@@ -93,4 +93,4 @@ You can find the star rating code in `starsort.go`. And yes, it looks very maths
 - Break tags up into new tags table
 - Add a way to update in parts, perhaps an option to do one category at once
 - Add a column to mark a title that has an error on import, so we can do a run of just errors
-- ~~Add category 19377132031 children's sci-fi fantasy~~
+- Add category 19377132031 children's sci-fi fantasy~~
