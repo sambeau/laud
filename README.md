@@ -89,11 +89,11 @@ You can find the star rating code in `starsort.go`. And yes, it looks very maths
 - Design an iOS App
 - Make an iOS App
 - Add a simple way to restart a scraping job
-- Add an option to only scrape for one language
+- ~~Add an option to only scrape for one language~~
 - Break tags up into new tags table
 - Add a way to update in parts, perhaps an option to do one category at once
 - Add a column to mark a title that has an error on import, so we can do a run of just errors
-- Reject based on tag e.g. ["Biographies & Memoirs","Mental Health","Psychology","Gender Studies","Performing Arts"]
+- ~~Reject based on tag e.g. ["Biographies & Memoirs","Mental Health","Psychology","Gender Studies","Performing Arts"]~~
 - add "Mystery, Thriller, Suspense" (and for YA)
-- remove featured
-~~Add category 19377132031 children's sci-fi fantasy~~
+- ~~remove featured~~
+- ~~Add category 19377132031 children's sci-fi fantasy~~
