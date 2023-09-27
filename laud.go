@@ -15,12 +15,14 @@ import (
 	"github.com/supabase-community/supabase-go"
 )
 
+const version = 0.6
+
 const baseBookUrl = "https://www.audible.co.uk/pd/"
 const baseSearchUrl = "https://www.audible.co.uk/search?"
 
 // these 2 numbers multiplied shouldn't be bigger than 500
-const pageSize = 50     // can be: 20, 30, 40, 50
-const pagesToFetch = 10 // mostly for debugging, 1–50
+const pageSize = 20    // can be: 20, 30, 40, 50
+const pagesToFetch = 1 // mostly for debugging, 1–50
 
 type Category string
 
@@ -89,16 +91,49 @@ func (c Category) Friendly() string {
 	return "Unknown Category"
 }
 
+func (c Category) Tags() []string {
+	switch c {
+	case categorySciFiFantasy:
+		return []string{"Science Fiction & Fantasy", "Science Fiction", "Fantasy"}
+	case categoryFantasy:
+		return []string{"Science Fiction & Fantasy", "Fantasy"}
+	case categorySciFi:
+		return []string{"Science Fiction & Fantasy", "Science Fiction"}
+	case categoryKidsSciFiFantasy:
+		return []string{"Children's", "Science Fiction & Fantasy", "Science Fiction", "Fantasy"}
+	case categoryYASciFiFantasy:
+		return []string{"Teen & Young Adult", "Science Fiction & Fantasy", "Science Fiction", "Fantasy"}
+	case categoryFantasyEpic:
+		return []string{"Science Fiction & Fantasy", "Fantasy", "Epic"}
+	case categoryFantasyAdventure:
+		return []string{"Science Fiction & Fantasy", "Fantasy", "Adventure"}
+	case categoryFantasyCreatures:
+		return []string{"Science Fiction & Fantasy", "Fantasy", "Creatures"}
+	case categoryFantasyHumour:
+		return []string{"Science Fiction & Fantasy", "Fantasy", "Humour"}
+	case categorySciFiHard:
+		return []string{"Science Fiction & Fantasy", "Science Fiction", "Hard"}
+	case categorySciFiHumor:
+		return []string{"Science Fiction & Fantasy", "Science Fiction", "Humor"}
+	case categorySciFiSpaceExplore:
+		return []string{"Science Fiction & Fantasy", "Science Fiction", "Space", "Space Exploration"}
+	case categorySciFiSpaceOpera:
+		return []string{"Science Fiction & Fantasy", "Science Fiction", "Space", "Space Opera"}
+	}
+
+	return []string{}
+}
+
 type Sort string
 
 const (
-	sortFeatured Sort = ""
+	sortFeatured Sort = "" // seems to produce guff!
 	sortPop      Sort = "popularity-rank"
 	sortReview   Sort = "review-rank"
 )
 
 var sorts []Sort = []Sort{
-	sortFeatured,
+	// sortFeatured, // removed as seems to produce guff!
 	sortPop,
 	sortReview,
 }
@@ -118,7 +153,7 @@ func (s Sort) Friendly() string {
 func makeSearchUrl(n Category, s Sort, page int) string {
 	url := baseSearchUrl
 	if n != "" {
-		url += "&category=" + string(n)
+		url += "&node=" + string(n)
 	}
 	url += "&sort=" + string(s)
 	if page > 0 {
@@ -165,13 +200,22 @@ type Book struct {
 	DurationInMins     int       `json:"durationInMins"`
 }
 
+type tag struct {
+	asin string
+	tag  string
+}
+
 type BookCollector struct {
 	books           map[string]bool
+	bannedTags      map[string]bool
+	bannedWords     []string
 	db              *supabase.Client
 	listCollector   *colly.Collector
 	detailCollector *colly.Collector
+	currentCategory Category
 }
 
+var inEnglishRx = regexp.MustCompile(`(?i)Language:\s+English`)
 var findPreOrderRx = regexp.MustCompile(`(?i)pre-?order`)
 var findNotRatedRx = regexp.MustCompile(`(?i)Not\srated\syet`)
 var fixFormatRx = regexp.MustCompile(`\s+`)
@@ -185,33 +229,47 @@ func (bc *BookCollector) setupCollectors() {
 			id = h.Attr("sample-asin")
 			return false
 		})
+		title := ""
+		e.ForEachWithBreak("h3 > a", func(_ int, h *colly.HTMLElement) bool {
+			title = h.Text
+			return false
+		})
+		productText := e.DOM.Text()
+		// is this book in English?
+		if !inEnglishRx.MatchString(productText) {
+			log.Println("- - SKIP: NOT ENGLISH:", title)
+			return
+		}
 		// is this book pre-order only?
-		preOrder := findPreOrderRx.MatchString(e.DOM.Text())
+		if findPreOrderRx.MatchString(productText) {
+			log.Println("- - SKIP: PRE-ORDER:", title)
+			return
+		}
 		// has this book been rated yet?
-		notRated := findNotRatedRx.MatchString(e.DOM.Text())
-
-		if (preOrder == false) && (notRated == false) {
-			// have we fetched this book already?
-			if _, ok := bc.books[id]; !ok {
-				// not in the map so go and fetch it
-				// log.Println("FETCHING: Page for", id)
-				link := baseBookUrl + id
-				bc.detailCollector.Visit(e.Request.AbsoluteURL(link))
-			} else {
-				log.Println("- - SKIP:", id, "Seen before")
-			}
-		} else {
-			title := ""
-			e.ForEachWithBreak("h3 > a", func(_ int, h *colly.HTMLElement) bool {
-				title = h.Text
-				return false
-			})
-			if preOrder {
-				log.Println("- - SKIP: PRE-ORDER:", title)
-			} else {
-				log.Println("- - SKIP: NOT RATED:", title)
+		if findNotRatedRx.MatchString(productText) {
+			log.Println("- - SKIP: NOT RATED:", title)
+			return
+		}
+		// does this book contain banned words?
+		for _, bannedWord := range bc.bannedWords {
+			if strings.Contains(productText, bannedWord) {
+				log.Printf("- - SKIP: word '%s' in %s", bannedWord, title)
+				return
 			}
 		}
+		// tag it as we've now seen it in this category, even if we've already seen it in another
+		for _, tag := range bc.currentCategory.Tags() {
+			bc.addBookTagToDB(id, tag)
+		}
+
+		// have we fetched this book before?
+		if _, ok := bc.books[id]; ok {
+			log.Println("- - SKIP:", id, "SEEN BEFORE")
+			return
+		}
+		// not in the map so go and fetch it
+		link := baseBookUrl + id
+		bc.detailCollector.Visit(e.Request.AbsoluteURL(link))
 	})
 
 	bc.detailCollector.OnHTML("body > div.adbl-page.desktop", func(e *colly.HTMLElement) {
@@ -219,6 +277,14 @@ func (bc *BookCollector) setupCollectors() {
 		// boom!
 		b := &Book{}
 		e.Unmarshal(b)
+
+		// does this book contain banned tags?
+		for _, tag := range b.Tags {
+			if _, ok := bc.bannedTags[tag]; ok {
+				log.Printf("- - SKIP: tag '%s' in %s", tag, b.Title)
+				return
+			}
+		}
 
 		// fix a few things
 
@@ -315,15 +381,28 @@ func (bc *BookCollector) setupCollectors() {
 }
 
 func (bc *BookCollector) getAllPages(category Category, sort Sort) {
+	bc.currentCategory = category
 	for pageNumber := 1; pageNumber <= pagesToFetch; pageNumber++ {
 		log.Printf("- PAGE: %d of %d (books: %d to %d) (%s by %s)\n", pageNumber, pagesToFetch, ((pageNumber-1)*pageSize)+1, pageNumber*pageSize, category.Friendly(), sort.Friendly())
+
 		url := makeSearchUrl(category, sort, pageNumber)
 		log.Println("- - LOAD:", url)
 		bc.listCollector.Visit(url)
 	}
 }
+func (bc *BookCollector) getDebugPage(url string) {
+	log.Println("- - LOAD:", url)
+	bc.listCollector.Visit(url)
+}
+
+func (bc *BookCollector) addBookTagToDB(id, tag string) {
+	log.Printf("Tag %s with %s\n", id, tag)
+	bc.db.Rpc("insert_tag", "", map[string]string{"asin": id, "tag": tag})
+}
 
 func main() {
+
+	log.Printf("Laudible v%f\n", version)
 
 	API_URL := os.Getenv("API_URL")
 	API_KEY := os.Getenv("API_KEY")
@@ -341,6 +420,8 @@ func main() {
 
 	bookCollector := BookCollector{
 		books:           map[string]bool{},
+		bannedTags:      map[string]bool{},
+		bannedWords:     []string{},
 		db:              SbClient,
 		listCollector:   listCollector,
 		detailCollector: detailCollector,
@@ -354,10 +435,37 @@ func main() {
 	if err != nil {
 		log.Fatal("ERR!: DATABASE:", err)
 	}
-
 	log.Printf("INFO: %d books in database\n", count)
+
+	// load the banned tags
+
+	bannedTags := []map[string]string{}
+	count, err = SbClient.From("banned_tags").Select("tag", "exact", false).ExecuteTo(&bannedTags)
+	if err != nil {
+		log.Fatal("ERR!: DATABASE:", err)
+	}
+	log.Printf("INFO: %d banned tags in database\n", count)
+
+	// load the banned words
+
+	bannedWords := []map[string]string{}
+	count, err = SbClient.From("banned_words").Select("word", "exact", false).ExecuteTo(&bannedWords)
+	if err != nil {
+		log.Fatal("ERR!: DATABASE:", err)
+	}
+	log.Printf("INFO: %d banned words in database\n", count)
+
+	// convert books to a fast asin lookup
 	for _, book := range allKnownIds {
 		bookCollector.books[book["asin"]] = true
+	}
+	// convert banned_tags to a fast tag lookup
+	for _, tag := range bannedTags {
+		bookCollector.bannedTags[tag["tag"]] = true
+	}
+	// convert banned_tags to a fast tag lookup
+	for _, word := range bannedWords {
+		bookCollector.bannedWords = append(bookCollector.bannedWords, word["word"])
 	}
 
 	for _, category := range categories {
@@ -366,4 +474,8 @@ func main() {
 			bookCollector.getAllPages(category, sort)
 		}
 	}
+
+	// tell the database to update all the tags
+
+	log.Println("TAGS: update:", SbClient.Rpc("update_all_tags", "", nil))
 }
