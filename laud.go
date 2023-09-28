@@ -20,9 +20,15 @@ const version = 0.6
 const baseBookUrl = "https://www.audible.co.uk/pd/"
 const baseSearchUrl = "https://www.audible.co.uk/search?"
 
+// exponentially dole out fewer points from spot 1–100
+// 0.9794 spreads 250 points over the top 300 places
+// chosen because it gives a nice curve at the top
+const popularityFactor = 0.9794
+const popularityTopScore = 250
+
 // these 2 numbers multiplied shouldn't be bigger than 500
-const pageSize = 20    // can be: 20, 30, 40, 50
-const pagesToFetch = 1 // mostly for debugging, 1–50
+const pageSize = 50     // can be: 20, 30, 40, 50
+const pagesToFetch = 10 // mostly for debugging, 1–50
 
 type Category string
 
@@ -198,6 +204,7 @@ type Book struct {
 	RatingPerformance  float64   `json:"ratingperformance"`
 	RatingStory        float64   `json:"ratingstory"`
 	DurationInMins     int       `json:"durationInMins"`
+	PopularityScore    float64   `json:"popularity"`
 }
 
 type tag struct {
@@ -213,6 +220,8 @@ type BookCollector struct {
 	listCollector   *colly.Collector
 	detailCollector *colly.Collector
 	currentCategory Category
+	currentSort     Sort
+	popularityScore float64
 }
 
 var inEnglishRx = regexp.MustCompile(`(?i)Language:\s+English`)
@@ -264,6 +273,10 @@ func (bc *BookCollector) setupCollectors() {
 
 		// have we fetched this book before?
 		if _, ok := bc.books[id]; ok {
+			// we still need to score it's popularity
+			if bc.currentSort == sortPop && bc.popularityScore > 0.0 {
+				bc.updatePopularityScoreInDB(id, bc.getNextPopularityScore(bc.currentSort))
+			}
 			log.Println("- - SKIP:", id, "SEEN BEFORE")
 			return
 		}
@@ -357,6 +370,10 @@ func (bc *BookCollector) setupCollectors() {
 			}
 		}
 
+		// as this is the first time we've seen this book
+		// we can calculate it's base popularity
+		b.PopularityScore = bc.getNextPopularityScore(bc.currentSort)
+
 		// add to books
 		bc.books[b.Id] = true
 		//
@@ -375,6 +392,11 @@ func (bc *BookCollector) setupCollectors() {
 				log.Println("%#v", b)
 			}
 		} else {
+			// we still need to update popularity score
+			if bc.currentSort == sortPop && bc.popularityScore > 0.0 {
+				bc.updatePopularityScoreInDB(b.Id, b.PopularityScore)
+			}
+
 			log.Printf("- - DUP!: %s (%d)", b.Id, count)
 		}
 	})
@@ -382,6 +404,8 @@ func (bc *BookCollector) setupCollectors() {
 
 func (bc *BookCollector) getAllPages(category Category, sort Sort) {
 	bc.currentCategory = category
+	bc.currentSort = sort
+	bc.popularityScore = popularityTopScore // give points to the top 250 or so
 	for pageNumber := 1; pageNumber <= pagesToFetch; pageNumber++ {
 		log.Printf("- PAGE: %d of %d (books: %d to %d) (%s by %s)\n", pageNumber, pagesToFetch, ((pageNumber-1)*pageSize)+1, pageNumber*pageSize, category.Friendly(), sort.Friendly())
 
@@ -398,6 +422,22 @@ func (bc *BookCollector) getDebugPage(url string) {
 func (bc *BookCollector) addBookTagToDB(id, tag string) {
 	log.Printf("Tag %s with %s\n", id, tag)
 	bc.db.Rpc("insert_tag", "", map[string]string{"asin": id, "tag": tag})
+}
+
+func (bc *BookCollector) getNextPopularityScore(sort Sort) float64 {
+	if sort != sortPop {
+		return 0.0
+	}
+	ps := bc.popularityScore
+	bc.popularityScore = bc.popularityScore * popularityFactor
+	if bc.popularityScore < 1.0 {
+		bc.popularityScore = 0.0
+	}
+	return ps * 2.0 // make it out of 500
+}
+
+func (bc *BookCollector) updatePopularityScoreInDB(id string, score float64) {
+	bc.db.Rpc("add_to_popularity_score", "", map[string]interface{}{"asin_param": id, "score_param": score})
 }
 
 func main() {
@@ -472,10 +512,9 @@ func main() {
 		for _, sort := range sorts {
 			log.Printf("CATEGORY: %s sorted by %s", category.Friendly(), sort.Friendly())
 			bookCollector.getAllPages(category, sort)
+
+			// tell the database to update all the tags
+			log.Println("TAGS: update:", SbClient.Rpc("update_all_tags", "", nil))
 		}
 	}
-
-	// tell the database to update all the tags
-
-	log.Println("TAGS: update:", SbClient.Rpc("update_all_tags", "", nil))
 }
