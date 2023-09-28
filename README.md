@@ -17,9 +17,9 @@ So far, I have done the following:
 - Built the scraper
 - Created the online database
 - Written a better rating algorithm
-- Scraped 12 categories, with 3 sort orders each
+- Scraped 12 categories, with 2 sort orders each
 
-So, I now have a database with 7,230 audiobooks in it. Unfortunately, this includes titles not in English which are of no use to me, so I will probably have to run it again and remove them.
+So, I now have a database with >7,000 audiobooks in it. Unfortunately, this includes titles not in English which are of no use to me, so I will probably have to run it again and remove them.
 
 So that just leaves the simple task of building an app (and working out a few niggles).
 
@@ -29,24 +29,27 @@ The Go files (laud.go and starsort.go) make up the Audible scraper. It slurps up
 
 I'm currently listening to a lot of Fantasy & Sci-Fi, so I only scraped those categories. It's a little tricky to find out what the categories are, so I ended up going to a category on the Audible website and examining the URL string for a `node` parameter, which tend to look like `node=19378442031`.
 
-These are the `nodes` I scrape, which I've renamed `categories`:
+These are the (updated) list of `nodes` I scrape, which I've renamed `categories`:
 
-	categorySciFiFantasy      Category = "19378442031"
-	categoryFantasy           Category = "19378443031"
-	categoryFantasyEpic       Category = "19378451031"
-	categoryFantasyAdventure  Category = "19378444031"
-	categoryFantasyCreatures  Category = "19378449031"
-	categoryFantasyHumour     Category = "19378455031"
-	categorySciFi             Category = "19378464031"
-	categorySciFiHard         Category = "19378474031"
-	categorySciFiHumor        Category = "19378475031"
-	categorySciFiSpaceExplore Category = "19378479031"
-	categorySciFiSpaceOpera   Category = "19378480031"
-	categoryYASciFiFantasy    Category = "19377879031"
+	categorySciFiFantasy            Category = "19378442031"
+	categoryFantasy                 Category = "19378443031"
+	categoryFantasyEpic             Category = "19378451031"
+	categoryFantasyAdventure        Category = "19378444031"
+	categoryFantasyCreatures        Category = "19378449031"
+	categoryFantasyHumour           Category = "19378455031"
+	categorySciFi                   Category = "19378464031"
+	categorySciFiHard               Category = "19378474031"
+	categorySciFiHumor              Category = "19378475031"
+	categorySciFiSpaceExplore       Category = "19378479031"
+	categorySciFiSpaceOpera         Category = "19378480031"
+	categoryYASciFiFantasy          Category = "19377879031"
+	categoryKidsSciFiFantasy        Category = "19377132031"
+	categoryActionAdventure         Category = "19378254031"
+	categoryKidsActionAdventure     Category = "19376663031"
+	categoryMysteryThrillerSuspense Category = "19378257031"
 
 I also scrape more than one sort-order, as you are limited to 500 books in each search. So I search:
 
-	sortFeatured Sort = ""
 	sortPop      Sort = "popularity-rank"
 	sortReview   Sort = "review-rank"
 
@@ -84,16 +87,26 @@ Amazon gives it `5.0`. I give it `4.75239`, 474th on my list, which isn't bad. I
 
 You can find the star rating code in `starsort.go`. And yes, it looks very mathsy because the Python code was mathsy.
 
+## Popularity Scores
+
+I've added an experimental popularity score. As Audible don't expose download figures on the site I have had to make up my own based on where, and how often, a book appears in each category when sorted by popularity. I've used a magic formula where the top book in each list gets 500 points added to its popularity score and I exponentially shrink this number for all the other placings. By around 300 the score is zero. The more lists a title appears in, the more points it gets.
+
+I'll no doubt have to make adjustments to it.
+
+## Tags
+
+I import all of Audible's tags and add ones for each category, as Audible doesn't include those in the tags for some reason.
+
+
+## Banned Tags and Words
+
+I now keep a list of tags and words I don't want. At one point I was getting self-help books and other guff, so I filtered them out (this turned out to be a bug). However, I can still get rid of books I don't want: Erotica, LitRPG, BDSM etc.
+
 ## TODO
 
 - Design an iOS App
 - Make an iOS App
 - Add a simple way to restart a scraping job
-- ~~Add an option to only scrape for one language~~
-- Break tags up into new tags table
 - Add a way to update in parts, perhaps an option to do one category at once
 - Add a column to mark a title that has an error on import, so we can do a run of just errors
-- ~~Reject based on tag e.g. ["Biographies & Memoirs","Mental Health","Psychology","Gender Studies","Performing Arts"]~~
-- add "Mystery, Thriller, Suspense" (and for YA)
-- ~~remove featured~~
-- ~~Add category 19377132031 children's sci-fi fantasy~~
+
