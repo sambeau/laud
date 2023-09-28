@@ -19,7 +19,16 @@
 
 # Go workspace file
 go.work
+
+# macOS
+.DS_Store
+
 #laud
 laud
 .env
+*.code-workspace
 debug*
+.access_token
+*.csv
+supabase/
+logs/
