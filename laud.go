@@ -15,7 +15,7 @@ import (
 	"github.com/supabase-community/supabase-go"
 )
 
-const version = 0.6
+const version = 0.7
 
 const baseBookUrl = "https://www.audible.co.uk/pd/"
 const baseSearchUrl = "https://www.audible.co.uk/search?"
@@ -33,27 +33,33 @@ const pagesToFetch = 10 // mostly for debugging, 1–50
 type Category string
 
 const (
-	categorySciFiFantasy      Category = "19378442031"
-	categoryFantasy           Category = "19378443031"
-	categoryFantasyEpic       Category = "19378451031"
-	categoryFantasyAdventure  Category = "19378444031"
-	categoryFantasyCreatures  Category = "19378449031"
-	categoryFantasyHumour     Category = "19378455031"
-	categorySciFi             Category = "19378464031"
-	categorySciFiHard         Category = "19378474031"
-	categorySciFiHumor        Category = "19378475031"
-	categorySciFiSpaceExplore Category = "19378479031"
-	categorySciFiSpaceOpera   Category = "19378480031"
-	categoryYASciFiFantasy    Category = "19377879031"
-	categoryKidsSciFiFantasy  Category = "19377132031"
+	categorySciFiFantasy            Category = "19378442031"
+	categoryFantasy                 Category = "19378443031"
+	categoryFantasyEpic             Category = "19378451031"
+	categoryFantasyAdventure        Category = "19378444031"
+	categoryFantasyCreatures        Category = "19378449031"
+	categoryFantasyHumour           Category = "19378455031"
+	categorySciFi                   Category = "19378464031"
+	categorySciFiHard               Category = "19378474031"
+	categorySciFiHumor              Category = "19378475031"
+	categorySciFiSpaceExplore       Category = "19378479031"
+	categorySciFiSpaceOpera         Category = "19378480031"
+	categoryYASciFiFantasy          Category = "19377879031"
+	categoryKidsSciFiFantasy        Category = "19377132031"
+	categoryActionAdventure         Category = "19378254031"
+	categoryKidsActionAdventure     Category = "19376663031"
+	categoryMysteryThrillerSuspense Category = "19378257031"
 )
 
 var categories []Category = []Category{
 	categorySciFiFantasy,
-	categoryFantasy,
-	categorySciFi,
 	categoryYASciFiFantasy,
 	categoryKidsSciFiFantasy,
+	categoryFantasy,
+	categorySciFi,
+	categoryActionAdventure,
+	categoryKidsActionAdventure,
+	categoryMysteryThrillerSuspense,
 	categoryFantasyEpic,
 	categoryFantasyAdventure,
 	categoryFantasyCreatures,
@@ -92,6 +98,12 @@ func (c Category) Friendly() string {
 		return "SciFi Space Exploration"
 	case categorySciFiSpaceOpera:
 		return "SciFi Space Opera"
+	case categoryActionAdventure:
+		return "Action & Adventure"
+	case categoryKidsActionAdventure:
+		return "Children's Action & Adventure"
+	case categoryMysteryThrillerSuspense:
+		return "Mystery, Thriller & Suspense"
 	}
 
 	return "Unknown Category"
@@ -125,6 +137,13 @@ func (c Category) Tags() []string {
 		return []string{"Science Fiction & Fantasy", "Science Fiction", "Space", "Space Exploration"}
 	case categorySciFiSpaceOpera:
 		return []string{"Science Fiction & Fantasy", "Science Fiction", "Space", "Space Opera"}
+	case categoryActionAdventure:
+		return []string{"Action & Adventure", "Action", "Adventure"}
+	case categoryKidsActionAdventure:
+		return []string{"Children's", "Action & Adventure", "Action", "Adventure"}
+	case categoryMysteryThrillerSuspense:
+		return []string{"Mystery, Thriller & Suspense", "Mystery", "Thriller", "Suspense"}
+
 	}
 
 	return []string{}
@@ -420,7 +439,7 @@ func (bc *BookCollector) getDebugPage(url string) {
 }
 
 func (bc *BookCollector) addBookTagToDB(id, tag string) {
-	log.Printf("Tag %s with %s\n", id, tag)
+	// log.Printf("Tag %s with %s\n", id, tag)
 	bc.db.Rpc("insert_tag", "", map[string]string{"asin": id, "tag": tag})
 }
 
@@ -437,7 +456,7 @@ func (bc *BookCollector) getNextPopularityScore(sort Sort) float64 {
 }
 
 func (bc *BookCollector) updatePopularityScoreInDB(id string, score float64) {
-	bc.db.Rpc("add_to_popularity_score", "", map[string]interface{}{"asin_param": id, "score_param": score})
+	bc.db.Rpc("add_to_popularity_score", "", map[string]interface{}{"asin": id, "score": score})
 }
 
 func main() {
