@@ -15,7 +15,7 @@ import (
 	"github.com/supabase-community/supabase-go"
 )
 
-const version = 0.7
+const version = 1.0
 
 const baseBookUrl = "https://www.audible.co.uk/pd/"
 const baseSearchUrl = "https://www.audible.co.uk/search?"
@@ -345,6 +345,7 @@ func (bc *BookCollector) setupCollectors() {
 		if len(b.RatingsStory) > 0 {
 			b.RatingStory = starSort(stringsToInts(b.RatingsStory))
 		}
+
 		// pull data from javascript json
 		jsonData := ""
 		e.ForEachWithBreak("#bottom-0 > script", func(_ int, h *colly.HTMLElement) bool {
@@ -370,8 +371,12 @@ func (bc *BookCollector) setupCollectors() {
 
 			// Find duration in minutes
 			if data != nil && data[0] != nil && data[0]["duration"] != nil {
+				// ^ this can be unreliable so check everything exists
 				durationString := data[0]["duration"].(string)
 				durationHours := 0
+				// this seems over the top just to read two numbers!
+				// format is 10H15M, but sometimes 10H or 30M
+				// so, read each one individually
 				dhs := findHourRx.FindStringSubmatch(durationString)
 				if len(dhs) != 0 {
 					durationHours, err = strconv.Atoi(dhs[1])
@@ -427,9 +432,12 @@ func (bc *BookCollector) setupCollectors() {
 }
 
 func (bc *BookCollector) getAllPages(category Category, sort Sort) {
+	// setupCollectors needs these, so pass them in bc
 	bc.currentCategory = category
 	bc.currentSort = sort
 	bc.popularityScore = popularityTopScore // give points to the top 250 or so
+
+	// page numbers start at 1 hence the (pageNumber-1)*pageSize)+1
 	for pageNumber := 1; pageNumber <= pagesToFetch; pageNumber++ {
 		log.Printf("- PAGE: %d of %d (books: %d to %d) (%s by %s)\n", pageNumber, pagesToFetch, ((pageNumber-1)*pageSize)+1, pageNumber*pageSize, category.Friendly(), sort.Friendly())
 
@@ -438,17 +446,20 @@ func (bc *BookCollector) getAllPages(category Category, sort Sort) {
 		bc.listCollector.Visit(url)
 	}
 }
+
 func (bc *BookCollector) getDebugPage(url string) {
+	// load a single list page
 	log.Println("- - LOAD:", url)
 	bc.listCollector.Visit(url)
 }
 
 func (bc *BookCollector) addBookTagToDB(id, tag string) {
-	// log.Printf("Tag %s with %s\n", id, tag)
+	// insert_tag RPC
 	bc.db.Rpc("insert_tag", "", map[string]string{"asin": id, "tag": tag})
 }
 
 func (bc *BookCollector) getNextPopularityScore(sort Sort) float64 {
+	// lost magic numbers here. Seem to work OK.
 	if sort != sortPop {
 		return 0.0
 	}
@@ -461,6 +472,7 @@ func (bc *BookCollector) getNextPopularityScore(sort Sort) float64 {
 }
 
 func (bc *BookCollector) updatePopularityScoreInDB(id string, score float64) {
+	// add_to_popularity_score RPC
 	bc.db.Rpc("add_to_popularity_score", "", map[string]interface{}{"asin": id, "score": score})
 }
 
@@ -468,9 +480,12 @@ func main() {
 
 	log.Printf("Laudible v%f\n", version)
 
+	// loaded by magic. well, actually:
+	// github.com/joho/godotenv/autoload
 	API_URL := os.Getenv("API_URL")
 	API_KEY := os.Getenv("API_KEY")
 
+	// supabase, but it's just posgres+postgres
 	SbClient, err := supabase.NewClient(API_URL, API_KEY, nil)
 	if err != nil {
 		fmt.Println("cannot initalize client", err)
@@ -478,10 +493,13 @@ func main() {
 
 	listCollector := colly.NewCollector(
 		colly.AllowedDomains("www.audible.co.uk"),
+		// use my desktop user-agent
 		colly.UserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Safari/605.1.15"),
 	)
+	// we need two, one for the product list, one for the product page
 	detailCollector := listCollector.Clone()
 
+	// initialise the book collector
 	bookCollector := BookCollector{
 		books:           map[string]bool{},
 		bannedTags:      map[string]bool{},
@@ -493,7 +511,6 @@ func main() {
 	bookCollector.setupCollectors()
 
 	// pre-seed books with database contents
-
 	allKnownIds := []map[string]string{}
 	count, err := SbClient.From("books").Select("asin", "exact", false).ExecuteTo(&allKnownIds)
 	if err != nil {
@@ -502,7 +519,6 @@ func main() {
 	log.Printf("INFO: %d books in database\n", count)
 
 	// load the banned tags
-
 	bannedTags := []map[string]string{}
 	count, err = SbClient.From("banned_tags").Select("tag", "exact", false).ExecuteTo(&bannedTags)
 	if err != nil {
@@ -511,7 +527,6 @@ func main() {
 	log.Printf("INFO: %d banned tags in database\n", count)
 
 	// load the banned words
-
 	bannedWords := []map[string]string{}
 	count, err = SbClient.From("banned_words").Select("word", "exact", false).ExecuteTo(&bannedWords)
 	if err != nil {
@@ -532,12 +547,15 @@ func main() {
 		bookCollector.bannedWords = append(bookCollector.bannedWords, word["word"])
 	}
 
+	// load category list, once for each sort
 	for _, category := range categories {
 		for _, sort := range sorts {
+			// read through the products
 			log.Printf("CATEGORY: %s sorted by %s", category.Friendly(), sort.Friendly())
 			bookCollector.getAllPages(category, sort)
 
 			// tell the database to update all the tags
+			// update_all_tags RPC
 			log.Println("TAGS: update:", SbClient.Rpc("update_all_tags", "", nil))
 		}
 	}
