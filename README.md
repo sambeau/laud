@@ -19,7 +19,7 @@ So far, I have done the following:
 - Written a better rating algorithm
 - Scraped 12 categories, with 2 sort orders each
 
-So, I now have a database with >6,000 audiobooks in it.
+I now have a database with >6,000 audiobooks in it, from categories I like, just the English ones, without all the spammy books, LitRPG, Warhammer and books that aren't out yet.
 
 So that just leaves the simple task of building an iOS app—_I mean, how hard can it be, right?_.
 
