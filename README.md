@@ -114,7 +114,7 @@ I thought it would be interesting to compare review score with popularity score.
 | Benjamin Wallace        | Dads vs. Zombies: Year 2                                                            | 2.69738 | 414.582    |
 
 
-Highest rated books:
+### Highest rated books
 
 | author                | title                                                            | rating  | popularity |
 | --------------------- | ---------------------------------------------------------------- | ------- | ---------- |
@@ -169,7 +169,7 @@ Highest rated books:
 | James S. A. Corey     | Tiamat's Wrath                                                   | 4.84039 | 0          |
 | TurtleMe              | Reckoning                                                        | 4.8401  | 0          |
 
-Most popular books:
+### Most popular books
 
 | author                  | title                                                                               | rating  | popularity |
 | ----------------------- | ----------------------------------------------------------------------------------- | ------- | ---------- |
