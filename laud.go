@@ -22,7 +22,12 @@ const baseSearchUrl = "https://www.audible.co.uk/search?"
 
 // exponentially dole out fewer points from spot 1–100
 // 0.9794 spreads 250 points over the top 300 places
-// chosen because it gives a nice curve at the top
+// chosen because it gives a nice curve at the top.
+// Other possible values
+// 100	0.939
+// 250	0.9753
+// 500	0.9876
+// 300	0.9794
 const popularityFactor = 0.9794
 const popularityTopScore = 250
 
