@@ -10,7 +10,7 @@ Like so many programmery things — it's not 'hard' but it isn't simple or quick
 
 ## The Plan
 
-The plan was to scrape all the Audible categories I care about and fill a database with them. Next, I wanted to apply a better rating algorithm to them, in the hope of seeing a more representative list of good titles. Finally, I want to build a better search app, so I can find my next book without having to use the terrible juddery lists in the Audible iOS app. I could build a web app, but I mostly have my phone in my hand when I'm looking for a new book to listen to.
+The plan was to scrape all the Audible categories I care about and fill a database with them. Next, I wanted to apply a better rating algorithm to them, in the hope of seeing a more representative list of good titles. Finally, I wanted to build a better search app, so I can find my next book without having to use the terrible juddery lists in the Audible iOS app. I could build a web app, but I mostly have my phone in my hand when I'm looking for a new book to listen to.
 
 So far, I have done the following:
 
@@ -19,13 +19,13 @@ So far, I have done the following:
 - Written a better rating algorithm
 - Scraped 12 categories, with 2 sort orders each
 
-So, I now have a database with >7,000 audiobooks in it. Unfortunately, this includes titles not in English which are of no use to me, so I will probably have to run it again and remove them.
+So, I now have a database with >6,000 audiobooks in it.
 
-So that just leaves the simple task of building an app (and working out a few niggles).
+So that just leaves the simple task of building an iOS app—_I mean, how hard can it be, right?_.
 
 ## Basic Details
 
-The Go files (laud.go and starsort.go) make up the Audible scraper. It slurps up categories (nodes, as Audible calls them) and fills a Superbase database. Supabase is just Postgres + Postgrest, so you should be able to make it work with any SQL database easily enough (there's only a few DB calls).
+The Go files (laud.go and starsort.go) make up the Audible scraper. It slurps up categories (nodes, as Audible calls them) and fills a Superbase database. Supabase is just Postgres + Postgrest, so you should be able to make it work with any SQL database easily enough (there are only a few DB calls).
 
 I'm currently listening to a lot of Fantasy & Sci-Fi, so I only scraped those categories. It's a little tricky to find out what the categories are, so I ended up going to a category on the Audible website and examining the URL string for a `node` parameter, which tend to look like `node=19378442031`.
 
@@ -89,7 +89,7 @@ You can find the star rating code in `starsort.go`. And yes, it looks very maths
 
 ## Popularity Scores
 
-I've added an experimental popularity score. As Audible don't expose download figures on the site I have had to make up my own based on where, and how often, a book appears in each category when sorted by popularity. I've used a magic formula where the top book in each list gets 500 points added to its popularity score and I exponentially shrink this number for all the other placings. By around 300 the score is zero. The more lists a title appears in, the more points it gets.
+I've added an experimental popularity score. As Audible don't expose download figures on the site, I have had to make up my own based on where, and how often, a book appears in each category when sorted by popularity. I've used a magic formula where the top book in each list gets 500 points added to its popularity score, and I exponentially shrink this number for all the other placings. By around 300 the score is zero. The more lists a title appears in, the more points it gets.
 
 I'll no doubt have to make adjustments to it.
 
@@ -103,9 +103,9 @@ I import all of Audible's tags and add ones for each category, as Audible doesn'
 I now keep a list of tags and words I don't want. At one point I was getting self-help books and other guff, so I filtered them out (this turned out to be a bug). However, I can still get rid of books I don't want: Erotica, LitRPG, BDSM etc.
 
 ## Results
-I now have 6,717 title in the database. It's smaller than previous runs as I'm now ignoring over 1,000 Warhammer and LitRPG titles.
+I now have 6,717 title in the database. It's smaller than previous runs, as I'm now ignoring over 1,000 Warhammer and LitRPG titles.
 
-I thought it would be interesting to compare review score with popularity score. As you can see there three titles that appear popular but have very low review scores. That seems suspicious to me and it smells of rigging/gaming the system, though it may be that Audible uses US sales as part of the popularity score while omitting them from the ratings score (I'm scraping the .co.uk store, not the .com).
+I thought it would be interesting to compare review score with popularity score. As you can see, there are three titles that appear popular but have very low review scores. That seems suspicious to me. It smells of rigging/gaming the system, though Audible may use US sales as part of the popularity score while omitting them from the ratings score (I'm scraping the .co.uk store, not the .com).
 
 | author               -  | title                                                                               | rating  | popularity |
 | ----------------------- | ----------------------------------------------------------------------------------- | ------- | ---------- |
