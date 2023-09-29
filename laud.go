@@ -10,30 +10,46 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gocolly/colly/v2"
-	_ "github.com/joho/godotenv/autoload"
-	"github.com/supabase-community/supabase-go"
+	"github.com/gocolly/colly/v2"               // scraping
+	_ "github.com/joho/godotenv/autoload"       // .env file support
+	"github.com/supabase-community/supabase-go" //supabase postgres+potgres
 )
 
 const version = 1.0
 
-const baseBookUrl = "https://www.audible.co.uk/pd/"
-const baseSearchUrl = "https://www.audible.co.uk/search?"
-
-// exponentially dole out fewer points from spot 1–100
-// 0.9794 spreads 250 points over the top 300 places
-// chosen because it gives a nice curve at the top.
-// Other possible values
-// 100	0.939
-// 250	0.9753
-// 500	0.9876
-// 300	0.9794
-const popularityFactor = 0.9794
-const popularityTopScore = 250
-
 // these 2 numbers multiplied shouldn't be bigger than 500
 const pageSize = 50     // can be: 20, 30, 40, 50
 const pagesToFetch = 10 // mostly for debugging, 1–50
+
+// Audible UK's URL format
+const baseBookUrl = "https://www.audible.co.uk/pd/"
+const baseSearchUrl = "https://www.audible.co.uk/search?"
+
+// Popularity Scores
+//
+// Every time we see a title in a list we use it's rank to add to a popularity score.
+//
+// exponentially dole out fewer points from spot 1–100
+// 0.9794 decreases 250 points to zero over 300 places
+// with a nice exponential curve, so:
+//
+// 	Positions=scores: 1=250, 2=245, 3=240, … , 5=90, 100=32, …, 299,1,300=0
+//
+// Magic numbers tried:
+//
+//    zero by 100 use 0.939
+//    zero by 250 use 0.9753
+//    zero by 500 use 0.9876
+//    zero by 300 use 0.9794
+//
+// I'm multiplying the score by 2 to make it out of 500 as I thought that was
+// easier to reason abuut when looking in the database, though I'm now wishing
+// I'd gone with 100 or 1000.
+//
+// Weirdly, I've  never seen a value higher than 500, which makes me suspicious.
+
+const popularityFactor = 0.9794
+const popularityTopScore = 250
 
 type Category string
 
@@ -114,6 +130,12 @@ func (c Category) Friendly() string {
 	return "Unknown Category"
 }
 
+// split categories into tags
+//
+// for some reason Audible doesn't tag by category, or if it does, it does it
+// somewhat randomly.
+//
+// I need to be able to search on these categories, so I add them here.
 func (c Category) Tags() []string {
 	switch c {
 	case categorySciFiFantasy:
@@ -205,6 +227,10 @@ func stringsToInts(ss []string) []int {
 	return ints
 }
 
+//
+// json: for magically filling the database
+// selector: where to find the value on the audible page (extremely brittle!)
+//
 type Book struct {
 	Title              string    `json:"title" selector:"h1"`
 	SubTitle           string    `json:"subtitle" selector:".bc-col-5 span ul li:nth-child(2)"`
@@ -256,34 +282,48 @@ var findMinRx = regexp.MustCompile(`(?i)(\d+)M`)
 var findHourRx = regexp.MustCompile(`(?i)(\d+)H`)
 
 func (bc *BookCollector) setupCollectors() {
+
+	//
+	// scraper for product list
+	// grab just enough information to decide whether to scrape the product page
+	// everything is geared to find a reason to skip the extra HTTP call to Audible
+	//
 	bc.listCollector.OnHTML(".productListItem", func(e *colly.HTMLElement) {
 		id := ""
+		// the audio button is the easiest place to find the asin (audible ID)
 		e.ForEachWithBreak("[id*=sample-player] > button", func(_ int, h *colly.HTMLElement) bool {
 			id = h.Attr("sample-asin")
 			return false
 		})
+		// find the title in an H3
 		title := ""
 		e.ForEachWithBreak("h3 > a", func(_ int, h *colly.HTMLElement) bool {
 			title = h.Text
 			return false
 		})
+		// scraping the actual text in the DOM is quicker and easier than looking
+		// in the html attributes for these values (it's probably less brittle too)
 		productText := e.DOM.Text()
 		// is this book in English?
+		// 'Language: English'
 		if !inEnglishRx.MatchString(productText) {
 			log.Println("- - SKIP: NOT ENGLISH:", title)
 			return
 		}
 		// is this book pre-order only?
+		// 'pre-order'
 		if findPreOrderRx.MatchString(productText) {
 			log.Println("- - SKIP: PRE-ORDER:", title)
 			return
 		}
 		// has this book been rated yet?
+		// 'Not rated yet'
 		if findNotRatedRx.MatchString(productText) {
 			log.Println("- - SKIP: NOT RATED:", title)
 			return
 		}
 		// does this book contain banned words?
+		// banned words are stored in database and loaded on launch
 		for _, bannedWord := range bc.bannedWords {
 			if strings.Contains(productText, bannedWord) {
 				log.Printf("- - SKIP: word '%s' in %s", bannedWord, title)
@@ -291,6 +331,7 @@ func (bc *BookCollector) setupCollectors() {
 			}
 		}
 		// tag it as we've now seen it in this category, even if we've already seen it in another
+		// audible don't put categories in metadata, but we need them there for search
 		for _, tag := range bc.currentCategory.Tags() {
 			bc.addBookTagToDB(id, tag)
 		}
@@ -309,6 +350,10 @@ func (bc *BookCollector) setupCollectors() {
 		bc.detailCollector.Visit(e.Request.AbsoluteURL(link))
 	})
 
+	//
+	// scraper for product page
+	// grab everything we can about an audiobook
+	//
 	bc.detailCollector.OnHTML("body > div.adbl-page.desktop", func(e *colly.HTMLElement) {
 
 		// boom!
