@@ -226,6 +226,9 @@ I thought it would be interesting to compare review score with popularity score.
 
 ## TODO
 
+- Add Tag synonyms so that 'humour', 'humor', 'humorous', can all just be 'funny'
+	- store in database as 'funny'
+	- apply synonyms to search
 - Design an iOS App
 - Make an iOS App
 - Add a simple way to restart a scraping job
